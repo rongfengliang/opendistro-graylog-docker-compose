@@ -1,9 +1,14 @@
 version: '3'
 services:
-  odfe-node1:
+  mongodb:
+    image: mongo:3
+    networks:
+      - odfe-net
+  elasticsearch:
     image: amazon/opendistro-for-elasticsearch:0.8.0
-    container_name: odfe-node1
+    container_name: elasticsearch
     environment:
+      - opendistro_security.ssl.http.enabled=false
       - cluster.name=odfe-cluster
       - bootstrap.memory_lock=true # along with the memlock settings below, disables swapping
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m" # minimum and maximum Java heap size, recommend setting both to 50% of system RAM
@@ -22,10 +27,11 @@ services:
     image: amazon/opendistro-for-elasticsearch:0.8.0
     container_name: odfe-node2
     environment:
+      - opendistro_security.ssl.http.enabled=false
       - cluster.name=odfe-cluster
       - bootstrap.memory_lock=true
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - discovery.zen.ping.unicast.hosts=odfe-node1
+      - discovery.zen.ping.unicast.hosts=elasticsearch
     ulimits:
       memlock:
         soft: -1
@@ -42,10 +48,35 @@ services:
     expose:
       - "5601"
     environment:
-      ELASTICSEARCH_URL: https://odfe-node1:9200
+      ELASTICSEARCH_URL: http://elasticsearch:9200
     networks:
       - odfe-net
-
+  graylog:
+    image: graylog/graylog:3.0
+    environment:
+      # CHANGE ME (must be at least 16 characters)!
+      - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
+      # Password: admin
+      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/
+      - GRAYLOG_ELASTICSEARCH_HOSTS=http://admin:admin@elasticsearch:9200
+    links:
+      - mongodb:mongo
+    networks:
+      - odfe-net
+    depends_on:
+      - mongodb
+    ports:
+      # Graylog web interface and REST API
+      - 9000:9000
+      # Syslog TCP
+      - 1514:1514
+      # Syslog UDP
+      - 1514:1514/udp
+      # GELF TCP
+      - 12201:12201
+      # GELF UDP
+      - 12201:12201/udp
 volumes:
   odfe-data1:
   odfe-data2:
